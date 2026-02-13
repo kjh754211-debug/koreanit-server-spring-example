@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Koreanit Board Client</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800">
+  <div id="app" class="max-w-6xl mx-auto p-4 md:p-8">
+    <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4 space-y-2 pointer-events-none">
+      <transition-group name="toast" tag="div">
+        <div
+          v-for="t in toasts"
+          :key="t.id"
+          class="pointer-events-auto rounded-xl shadow-lg px-4 py-3 text-sm font-medium border"
+          :class="t.type === 'error' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'">
+          {{ t.message }}
+        </div>
+      </transition-group>
+    </div>
+    <header class="mb-6">
+      <h1 class="text-2xl md:text-3xl font-bold">Koreanit API 클라이언트</h1>
+      <p class="text-sm text-slate-600 mt-1">Spring Boot API 테스트용 (Vue CDN + Tailwind)</p>
+    </header>
+
+    <section class="mb-6 bg-slate-900 text-slate-100 rounded-2xl p-4">
+      <h2 class="font-semibold mb-2">로그</h2>
+      <pre class="text-xs whitespace-pre-wrap break-words max-h-64 overflow-auto">{{ logs.join('\n') }}</pre>
+    </section>
+
+    <div class="grid md:grid-cols-3 gap-4">
+      <section class="bg-white rounded-2xl shadow p-4 space-y-3">
+        <h2 class="font-semibold text-lg">환경</h2>
+        <label class="block">
+          <span class="text-sm text-slate-600">Base URL</span>
+          <input v-model="baseUrl" class="mt-1 w-full border rounded-xl px-3 py-2" placeholder="http://localhost:8080" />
+        </label>
+        <button @click="pingMe" class="w-full bg-indigo-600 text-white rounded-xl py-2 hover:bg-indigo-700">내 정보 조회 (/api/me)</button>
+        <div class="text-sm">
+          <div class="font-medium">로그인 상태</div>
+          <div class="mt-1" :class="me ? 'text-emerald-600' : 'text-slate-500'">{{ me ? `로그인됨: ${me.nickname} (@${me.username})` : '로그인 안됨' }}</div>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-2xl shadow p-4 space-y-3">
+        <h2 class="font-semibold text-lg">회원가입</h2>
+        <input v-model="signup.username" class="w-full border rounded-xl px-3 py-2" placeholder="username" />
+        <input v-model="signup.password" type="password" class="w-full border rounded-xl px-3 py-2" placeholder="password" />
+        <input v-model="signup.nickname" class="w-full border rounded-xl px-3 py-2" placeholder="nickname" />
+        <input v-model="signup.email" class="w-full border rounded-xl px-3 py-2" placeholder="email (optional)" />
+        <button @click="register" class="w-full bg-slate-900 text-white rounded-xl py-2 hover:bg-black">가입</button>
+      </section>
+
+      <section class="bg-white rounded-2xl shadow p-4 space-y-3">
+        <h2 class="font-semibold text-lg">로그인 / 로그아웃</h2>
+        <input v-model="auth.username" class="w-full border rounded-xl px-3 py-2" placeholder="username" />
+        <input v-model="auth.password" type="password" class="w-full border rounded-xl px-3 py-2" placeholder="password" />
+        <div class="grid grid-cols-2 gap-2">
+          <button @click="login" class="bg-emerald-600 text-white rounded-xl py-2 hover:bg-emerald-700">로그인</button>
+          <button @click="logout" class="bg-rose-600 text-white rounded-xl py-2 hover:bg-rose-700">로그아웃</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="mt-6 grid lg:grid-cols-2 gap-4">
+      <section class="bg-white rounded-2xl shadow p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-lg">게시글</h2>
+          <button @click="fetchPosts" class="text-sm px-3 py-1 rounded-lg border hover:bg-slate-50">새로고침</button>
+        </div>
+
+        <div class="space-y-2">
+          <input v-model="newPost.title" class="w-full border rounded-xl px-3 py-2" placeholder="제목" />
+          <textarea v-model="newPost.content" class="w-full border rounded-xl px-3 py-2" rows="3" placeholder="내용"></textarea>
+          <button @click="createPost" class="w-full bg-indigo-600 text-white rounded-xl py-2 hover:bg-indigo-700">게시글 작성</button>
+        </div>
+
+        <div class="space-y-2 max-h-[420px] overflow-auto pr-1">
+          <article v-for="p in posts" :key="p.id" class="border rounded-xl p-3">
+            <div class="flex justify-between gap-2">
+              <h3 class="font-semibold">#{{p.id}} {{p.title}}</h3>
+              <button @click="selectPost(p)" class="text-sm text-indigo-600 hover:underline">댓글 보기</button>
+            </div>
+            <p class="text-sm text-slate-700 mt-1 line-clamp-2">{{p.content}}</p>
+            <div class="text-xs text-slate-500 mt-2">views: {{p.viewCount}} / comments: {{p.commentsCnt}}</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-2xl shadow p-4 space-y-3">
+        <h2 class="font-semibold text-lg">댓글 <span v-if="selectedPostId">(post: {{selectedPostId}})</span></h2>
+
+        <div class="space-y-2">
+          <input v-model.number="selectedPostId" type="number" class="w-full border rounded-xl px-3 py-2" placeholder="postId" />
+          <button @click="fetchComments" class="w-full border rounded-xl py-2 hover:bg-slate-50">댓글 조회</button>
+          <textarea v-model="newComment.content" class="w-full border rounded-xl px-3 py-2" rows="3" placeholder="댓글 내용"></textarea>
+          <button @click="createComment" class="w-full bg-slate-900 text-white rounded-xl py-2 hover:bg-black">댓글 작성</button>
+        </div>
+
+        <div class="space-y-2 max-h-[420px] overflow-auto pr-1">
+          <div v-for="c in comments" :key="c.id" class="border rounded-xl p-3">
+            <div class="text-sm font-semibold">#{{c.id}} user: {{c.userId}}</div>
+            <p class="text-sm text-slate-700 mt-1">{{c.content}}</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </div>
+
+  <style>
+    .toast-enter-active, .toast-leave-active { transition: all .25s ease; }
+    .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
+  </style>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          baseUrl: 'http://localhost:8080',
+          me: null,
+          signup: { username: '', password: '', nickname: '', email: '' },
+          auth: { username: '', password: '' },
+          newPost: { title: '', content: '' },
+          posts: [],
+          selectedPostId: null,
+          comments: [],
+          newComment: { content: '' },
+          logs: [],
+          toasts: []
+        }
+      },
+      methods: {
+        toast(message, type = 'success') {
+          const id = Date.now() + Math.random();
+          this.toasts.push({ id, message, type });
+          setTimeout(() => {
+            this.toasts = this.toasts.filter(t => t.id !== id);
+          }, 2200);
+        },
+        log(msg, payload) {
+          const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+          this.logs.unshift(payload ? `${line}\n${JSON.stringify(payload, null, 2)}` : line);
+          if (this.logs.length > 60) this.logs.length = 60;
+          this.toast(msg, msg.includes('실패') ? 'error' : 'success');
+        },
+        async api(path, options = {}) {
+          const res = await fetch(`${this.baseUrl}${path}`, {
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+            ...options
+          });
+          let data = null;
+          try { data = await res.json(); } catch (_) {}
+          if (!res.ok) {
+            throw new Error((data && (data.message || data.msg)) || `HTTP ${res.status}`);
+          }
+          return data;
+        },
+        async register() {
+          try {
+            const body = { ...this.signup };
+            if (!body.email) delete body.email;
+            const data = await this.api('/api/users', { method: 'POST', body: JSON.stringify(body) });
+            this.log('회원가입 성공', data);
+          } catch (e) { this.log(`회원가입 실패: ${e.message}`); }
+        },
+        async login() {
+          try {
+            const data = await this.api('/api/login', { method: 'POST', body: JSON.stringify(this.auth) });
+            this.log('로그인 성공', data);
+            await this.pingMe();
+          } catch (e) { this.log(`로그인 실패: ${e.message}`); }
+        },
+        async logout() {
+          try {
+            const data = await this.api('/api/logout', { method: 'POST' });
+            this.me = null;
+            this.log('로그아웃 성공', data);
+          } catch (e) { this.log(`로그아웃 실패: ${e.message}`); }
+        },
+        async pingMe() {
+          try {
+            const data = await this.api('/api/me');
+            this.me = data.data || data.result || data;
+            this.log('내 정보 조회 성공', this.me);
+          } catch (e) {
+            this.me = null;
+            this.log(`내 정보 조회 실패: ${e.message}`);
+          }
+        },
+        async fetchPosts() {
+          try {
+            const data = await this.api('/api/posts?page=1&limit=20');
+            this.posts = data.data || [];
+            this.log(`게시글 ${this.posts.length}개 조회`);
+          } catch (e) { this.log(`게시글 조회 실패: ${e.message}`); }
+        },
+        async createPost() {
+          try {
+            const data = await this.api('/api/posts', { method: 'POST', body: JSON.stringify(this.newPost) });
+            this.log('게시글 작성 성공', data);
+            this.newPost = { title: '', content: '' };
+            await this.fetchPosts();
+          } catch (e) { this.log(`게시글 작성 실패: ${e.message}`); }
+        },
+        selectPost(p) {
+          this.selectedPostId = p.id;
+          this.fetchComments();
+        },
+        async fetchComments() {
+          if (!this.selectedPostId) return this.log('postId를 먼저 선택/입력하세요');
+          try {
+            const data = await this.api(`/api/posts/${this.selectedPostId}/comments?limit=50`);
+            this.comments = data.data || [];
+            this.log(`댓글 ${this.comments.length}개 조회`);
+          } catch (e) { this.log(`댓글 조회 실패: ${e.message}`); }
+        },
+        async createComment() {
+          if (!this.selectedPostId) return this.log('postId를 먼저 선택/입력하세요');
+          try {
+            const data = await this.api(`/api/posts/${this.selectedPostId}/comments`, {
+              method: 'POST',
+              body: JSON.stringify(this.newComment)
+            });
+            this.log('댓글 작성 성공', data);
+            this.newComment = { content: '' };
+            await this.fetchComments();
+            await this.fetchPosts();
+          } catch (e) { this.log(`댓글 작성 실패: ${e.message}`); }
+        }
+      },
+      mounted() {
+        this.fetchPosts();
+        this.pingMe();
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
